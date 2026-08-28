@@ -108,18 +108,19 @@
 
   .download-row { display: flex; gap: 8px; margin-bottom: 16px; }
   .download-btn {
-    border: 1px solid var(--line);
-    background: var(--card);
-    color: var(--ink);
+    border: none;
+    background: var(--accent);
+    color: #fff;
     font-size: 13px;
     font-weight: 600;
-    padding: 8px 14px;
+    padding: 8px 16px;
     border-radius: 6px;
     cursor: pointer;
     font-family: inherit;
-    transition: border-color .15s ease, background .15s ease;
+    transition: background .15s ease, transform .1s ease;
   }
-  .download-btn:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+  .download-btn:hover { background: #ca4b02; }
+  .download-btn:active { transform: translateY(1px); }
   .summary-card {
     background: var(--card);
     border: 1px solid var(--line);
