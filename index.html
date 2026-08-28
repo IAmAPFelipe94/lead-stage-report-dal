@@ -105,6 +105,21 @@
 
   .summary-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
   .freshness { font-size: 12px; color: var(--ink-soft); margin-bottom: 10px; }
+
+  .download-row { display: flex; gap: 8px; margin-bottom: 16px; }
+  .download-btn {
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: border-color .15s ease, background .15s ease;
+  }
+  .download-btn:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
   .summary-card {
     background: var(--card);
     border: 1px solid var(--line);
@@ -215,6 +230,9 @@
   <div id="resultsArea"></div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script>
   // Set this to your deployed Apps Script Web App URL after deployment.
   const WEB_APP_URL = "https://lead-stage-report-dal.apfelipe94.workers.dev/";
@@ -224,6 +242,7 @@
   const statusEl = document.getElementById('status');
   const resultsArea = document.getElementById('resultsArea');
   const generateBtn = document.getElementById('generateBtn');
+  let currentData = null; // holds the last successful report response, for export
 
   function fmtDate(d) { return d.toISOString().split('T')[0]; }
 
@@ -303,6 +322,8 @@
   }
 
   function renderResults(data) {
+    currentData = data;
+
     if (!data.leads || data.leads.length === 0) {
       resultsArea.innerHTML = `
         <div class="empty-state">
@@ -328,6 +349,14 @@
       </div>
     `;
 
+    const downloadHtml = `
+      <div class="download-row">
+        <button class="download-btn" id="downloadCsvBtn">Download CSV</button>
+        <button class="download-btn" id="downloadXlsxBtn">Download Excel</button>
+        <button class="download-btn" id="downloadPdfBtn">Download PDF</button>
+      </div>
+    `;
+
     const rowsHtml = data.leads.map(l => `
       <tr>
         <td data-label="Name">${escapeHtml(l.name)}</td>
@@ -340,6 +369,7 @@
 
     resultsArea.innerHTML = `
       ${summaryHtml}
+      ${downloadHtml}
       <table>
         <thead>
           <tr>
@@ -353,6 +383,88 @@
         <tbody>${rowsHtml}</tbody>
       </table>
     `;
+
+    document.getElementById('downloadCsvBtn').addEventListener('click', downloadCsv);
+    document.getElementById('downloadXlsxBtn').addEventListener('click', downloadXlsx);
+    document.getElementById('downloadPdfBtn').addEventListener('click', downloadPdf);
+  }
+
+  function exportRows() {
+    return currentData.leads.map(l => ({
+      Name: l.name,
+      Phone: l.phone,
+      Email: l.email,
+      'Date Created': formatDisplayDate(l.dateAdded),
+      Pipeline: l.pipeline,
+      'Current Stage': l.stage,
+      Value: l.value,
+    }));
+  }
+
+  function exportFilename(ext) {
+    return `Lead Stage Report ${currentData.startDate} to ${currentData.endDate}.${ext}`;
+  }
+
+  function downloadCsv() {
+    const rows = exportRows();
+    const headers = Object.keys(rows[0]);
+    const escapeCsv = (val) => {
+      const str = String(val ?? '');
+      return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+    };
+    const csvLines = [
+      headers.join(','),
+      ...rows.map(r => headers.map(h => escapeCsv(r[h])).join(',')),
+    ];
+    const blob = new Blob([csvLines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    triggerDownload(blob, exportFilename('csv'));
+  }
+
+  function downloadXlsx() {
+    const rows = exportRows();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Lead Stage Report');
+    XLSX.writeFile(wb, exportFilename('xlsx'));
+  }
+
+  function downloadPdf() {
+    const rows = exportRows();
+    const headers = Object.keys(rows[0]);
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt' });
+
+    doc.setFontSize(14);
+    doc.text('Lead Stage Report', 40, 32);
+    doc.setFontSize(10);
+    doc.setTextColor(90, 90, 90);
+    doc.text(
+      `Leads created ${formatDisplayDate(currentData.startDate)} – ${formatDisplayDate(currentData.endDate)}  •  ${currentData.total} leads`,
+      40, 48
+    );
+
+    doc.autoTable({
+      startY: 62,
+      head: [headers],
+      body: rows.map(r => headers.map(h => String(r[h] ?? ''))),
+      styles: { fontSize: 8, cellPadding: 5 },
+      headStyles: { fillColor: [225, 91, 22], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [250, 249, 247] },
+      margin: { left: 40, right: 40 },
+    });
+
+    doc.save(exportFilename('pdf'));
+  }
+
+  function triggerDownload(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   function formatDisplayDate(iso) {
