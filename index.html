@@ -104,6 +104,7 @@
   .status.error { color: #b3261e; }
 
   .summary-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
+  .freshness { font-size: 12px; color: var(--ink-soft); margin-bottom: 10px; }
   .summary-card {
     background: var(--card);
     border: 1px solid var(--line);
@@ -295,6 +296,12 @@
     }
   }
 
+  function formatLastUpdated(iso) {
+    if (!iso) return "unknown";
+    const d = new Date(iso);
+    return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  }
+
   function renderResults(data) {
     if (!data.leads || data.leads.length === 0) {
       resultsArea.innerHTML = `
@@ -306,6 +313,7 @@
     }
 
     const summaryHtml = `
+      <div class="freshness">Data as of ${formatLastUpdated(data.lastUpdated)} · refreshes every 12 hours</div>
       <div class="summary-row">
         <div class="summary-card total">
           <div class="num">${data.total}</div>
