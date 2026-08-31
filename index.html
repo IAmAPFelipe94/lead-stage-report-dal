@@ -153,6 +153,21 @@
     padding: 10px 14px;
     border-bottom: 1px solid var(--line);
   }
+  thead th.sortable {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    padding-right: 20px;
+  }
+  thead th.sortable:hover { color: var(--accent); }
+  thead th.sortable.sort-asc::after,
+  thead th.sortable.sort-desc::after {
+    position: absolute;
+    right: 6px;
+    font-size: 10px;
+  }
+  thead th.sortable.sort-asc::after { content: "▲"; }
+  thead th.sortable.sort-desc::after { content: "▼"; }
   tbody td { padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
   tbody tr:last-child td { border-bottom: none; }
   tbody tr:hover { background: #faf7f3; }
@@ -306,6 +321,7 @@
       }
 
       statusEl.textContent = "";
+      sortState = { key: null, direction: 1 };
       renderResults(data);
     } catch (err) {
       statusEl.textContent = "Couldn't load the report. Check the connection and try again.";
@@ -365,6 +381,7 @@
         <td data-label="Date Created">${formatDisplayDate(l.dateAdded)}</td>
         <td data-label="Current Stage"><span class="stage-pill">${escapeHtml(l.stage)}</span></td>
         <td data-label="Pipeline">${escapeHtml(l.pipeline)}</td>
+        <td data-label="Interested In">${escapeHtml(l.interestedIn)}</td>
       </tr>
     `).join('');
 
@@ -374,11 +391,12 @@
       <table>
         <thead>
           <tr>
-            <th>Name</th>
-            <th>Phone</th>
-            <th>Date Created</th>
-            <th>Current Stage</th>
-            <th>Pipeline</th>
+            <th class="sortable" data-key="name">Name</th>
+            <th class="sortable" data-key="phone">Phone</th>
+            <th class="sortable" data-key="dateAdded">Date Created</th>
+            <th class="sortable" data-key="stage">Current Stage</th>
+            <th class="sortable" data-key="pipeline">Pipeline</th>
+            <th class="sortable" data-key="interestedIn">Interested In</th>
           </tr>
         </thead>
         <tbody>${rowsHtml}</tbody>
@@ -388,6 +406,44 @@
     document.getElementById('downloadCsvBtn').addEventListener('click', downloadCsv);
     document.getElementById('downloadXlsxBtn').addEventListener('click', downloadXlsx);
     document.getElementById('downloadPdfBtn').addEventListener('click', downloadPdf);
+
+    document.querySelectorAll('th.sortable').forEach(th => {
+      th.addEventListener('click', () => sortAndRerender(th.dataset.key));
+    });
+    updateSortIndicators();
+  }
+
+  let sortState = { key: null, direction: 1 }; // 1 = ascending, -1 = descending
+
+  function sortAndRerender(key) {
+    if (sortState.key === key) {
+      sortState.direction *= -1;
+    } else {
+      sortState.key = key;
+      sortState.direction = 1;
+    }
+
+    currentData.leads.sort((a, b) => {
+      let valA = a[key], valB = b[key];
+      if (key === 'dateAdded') {
+        valA = new Date(valA).getTime();
+        valB = new Date(valB).getTime();
+      } else {
+        valA = String(valA || '').toLowerCase();
+        valB = String(valB || '').toLowerCase();
+      }
+      if (valA < valB) return -1 * sortState.direction;
+      if (valA > valB) return 1 * sortState.direction;
+      return 0;
+    });
+
+    renderResults(currentData);
+  }
+
+  function updateSortIndicators() {
+    if (!sortState.key) return;
+    const th = document.querySelector(`th.sortable[data-key="${sortState.key}"]`);
+    if (th) th.classList.add(sortState.direction === 1 ? 'sort-asc' : 'sort-desc');
   }
 
   function exportRows() {
@@ -398,6 +454,7 @@
       'Date Created': formatDisplayDate(l.dateAdded),
       Pipeline: l.pipeline,
       'Current Stage': l.stage,
+      'Interested In': l.interestedIn,
       Value: l.value,
     }));
   }
