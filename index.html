@@ -121,6 +121,62 @@
   }
   .download-btn:hover { background: #ca4b02; }
   .download-btn:active { transform: translateY(1px); }
+
+  .view-toggle { display: flex; gap: 6px; margin-bottom: 20px; }
+  .view-toggle-btn {
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: var(--ink-soft);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all .15s ease;
+  }
+  .view-toggle-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .view-toggle-btn.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+  .funnel-total { font-size: 13px; font-weight: 600; color: var(--ink); margin-bottom: 20px; }
+  .funnel-section { margin-bottom: 28px; }
+  .funnel-section h3 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ink-soft);
+    margin: 0 0 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--line);
+  }
+  .funnel-row {
+    display: grid;
+    grid-template-columns: 180px 1fr 90px;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  .funnel-label { font-size: 13px; color: var(--ink); }
+  .funnel-bar-track {
+    background: #efece6;
+    border-radius: 4px;
+    height: 20px;
+    overflow: hidden;
+  }
+  .funnel-bar {
+    background: var(--accent);
+    height: 100%;
+    border-radius: 4px;
+    transition: width .3s ease;
+  }
+  .funnel-bar.lost { background: #a8a29a; }
+  .funnel-count { font-size: 13px; font-weight: 600; color: var(--ink); text-align: right; }
+  .funnel-pct { font-weight: 400; color: var(--ink-soft); font-size: 12px; }
+
+  @media (max-width: 640px) {
+    .funnel-row { grid-template-columns: 120px 1fr 70px; }
+    .funnel-label { font-size: 12px; }
+  }
   .summary-card {
     background: var(--card);
     border: 1px solid var(--line);
@@ -332,6 +388,8 @@
     }
   }
 
+  let viewMode = 'list'; // 'list' | 'funnel'
+
   function formatLastUpdated(iso) {
     if (!iso) return "unknown";
     const d = new Date(iso);
@@ -350,6 +408,34 @@
       return;
     }
 
+    const toggleHtml = `
+      <div class="view-toggle">
+        <button class="view-toggle-btn ${viewMode === 'list' ? 'active' : ''}" data-view="list">Lead List</button>
+        <button class="view-toggle-btn ${viewMode === 'funnel' ? 'active' : ''}" data-view="funnel">Sales Funnel</button>
+      </div>
+    `;
+
+    resultsArea.innerHTML = toggleHtml + `<div id="viewArea"></div>`;
+
+    document.querySelectorAll('.view-toggle-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        viewMode = btn.dataset.view;
+        renderResults(currentData);
+      });
+    });
+
+    const viewArea = document.getElementById('viewArea');
+    if (viewMode === 'funnel') {
+      renderFunnelView(data, viewArea);
+    } else {
+      renderListView(data, viewArea);
+    }
+  }
+
+  // ==========================================
+  // LIST VIEW — sortable table + exports
+  // ==========================================
+  function renderListView(data, container) {
     const summaryHtml = `
       <div class="freshness">Data as of ${formatLastUpdated(data.lastUpdated)} · refreshes every 12 hours</div>
       <div class="summary-row">
@@ -385,7 +471,7 @@
       </tr>
     `).join('');
 
-    resultsArea.innerHTML = `
+    container.innerHTML = `
       ${summaryHtml}
       ${downloadHtml}
       <table>
@@ -411,6 +497,92 @@
       th.addEventListener('click', () => sortAndRerender(th.dataset.key));
     });
     updateSortIndicators();
+  }
+
+  // ==========================================
+  // FUNNEL VIEW — full lead journey, grouped by pipeline + stage
+  // ==========================================
+  // Classifies each lead into a funnel bucket using pipeline name first
+  // (robust against exact stage-name quirks like trailing spaces/renumbering),
+  // falling back to stage-name matching within Cold Lead / Sales pipelines
+  // for the finer-grained buckets Angi asked about.
+  function classifyLead(l) {
+    const pipeline = (l.pipeline || '').toLowerCase();
+    const stage = (l.stage || '').toLowerCase().trim();
+
+    if (pipeline.includes('inside sales') || pipeline.includes('new leads')) {
+      return { key: 'in_contact', label: 'In Contact (New Lead)', section: 'progress' };
+    }
+    if (pipeline.includes('completed work')) {
+      return { key: 'installed', label: 'Installed / Completed', section: 'progress' };
+    }
+    if (pipeline.includes('existing customer')) {
+      return { key: 'existing_client', label: 'Existing Client', section: 'progress' };
+    }
+    if (pipeline.includes('future follow')) {
+      return { key: 'future_followup', label: 'Future Follow-up', section: 'progress' };
+    }
+    if (pipeline.includes('sales') && pipeline.includes('estimate')) {
+      if (stage.includes('sold')) return { key: 'sold', label: 'Sold', section: 'progress' };
+      if (stage.includes('awaiting deposit')) return { key: 'awaiting_deposit', label: 'Awaiting Deposit', section: 'progress' };
+      if (stage.includes('quote') && stage.includes('sent')) return { key: 'quote_sent', label: 'Quote / Design Sent', section: 'progress' };
+      if (stage.includes('consult')) return { key: 'consult_scheduled', label: 'Consult Scheduled', section: 'progress' };
+      if (stage.includes('declined')) return { key: 'declined', label: 'Quote / Design Declined', section: 'lost' };
+      return { key: 'sales_other', label: `Sales — ${l.stage}`, section: 'progress' };
+    }
+    if (pipeline.includes('cold lead')) {
+      if (stage.includes('non-viable') || stage.includes('junk')) return { key: 'not_viable', label: 'Not Viable / Junk', section: 'lost' };
+      if (stage.includes('too expensive')) return { key: 'too_expensive', label: 'Too Expensive', section: 'lost' };
+      if (stage.includes('not interested')) return { key: 'not_interested', label: 'Not Interested', section: 'lost' };
+      if (stage.includes('quote given')) return { key: 'quote_no_response', label: 'Quote Given – No Response', section: 'lost' };
+      if (stage.includes('no response')) return { key: 'no_response', label: 'No Response', section: 'lost' };
+      return { key: 'cold_other', label: `Cold Lead — ${l.stage}`, section: 'lost' };
+    }
+    return { key: 'other', label: `${l.pipeline || 'Unknown'} — ${l.stage || 'Unknown'}`, section: 'progress' };
+  }
+
+  const PROGRESS_ORDER = ['in_contact', 'consult_scheduled', 'quote_sent', 'awaiting_deposit', 'sold', 'installed', 'existing_client', 'future_followup', 'sales_other', 'other'];
+  const LOST_ORDER = ['not_viable', 'not_interested', 'too_expensive', 'no_response', 'quote_no_response', 'declined', 'cold_other'];
+
+  function renderFunnelView(data, container) {
+    const buckets = {}; // key -> { label, count, section }
+    data.leads.forEach(l => {
+      const c = classifyLead(l);
+      if (!buckets[c.key]) buckets[c.key] = { label: c.label, count: 0, section: c.section };
+      buckets[c.key].count++;
+    });
+
+    const total = data.leads.length;
+    const maxCount = Math.max(1, ...Object.values(buckets).map(b => b.count));
+
+    function renderBarGroup(orderKeys, title) {
+      const rows = orderKeys
+        .filter(k => buckets[k])
+        .map(k => {
+          const b = buckets[k];
+          const pct = ((b.count / total) * 100).toFixed(1);
+          const widthPct = ((b.count / maxCount) * 100).toFixed(1);
+          const barClass = b.section === 'lost' ? 'funnel-bar lost' : 'funnel-bar';
+          return `
+            <div class="funnel-row">
+              <div class="funnel-label">${escapeHtml(b.label)}</div>
+              <div class="funnel-bar-track">
+                <div class="${barClass}" style="width:${widthPct}%"></div>
+              </div>
+              <div class="funnel-count">${b.count} <span class="funnel-pct">(${pct}%)</span></div>
+            </div>
+          `;
+        }).join('');
+      if (!rows) return '';
+      return `<div class="funnel-section"><h3>${title}</h3>${rows}</div>`;
+    }
+
+    container.innerHTML = `
+      <div class="freshness">Data as of ${formatLastUpdated(data.lastUpdated)} · refreshes every 12 hours</div>
+      <div class="funnel-total">${total} leads in this range</div>
+      ${renderBarGroup(PROGRESS_ORDER, 'Sales Journey')}
+      ${renderBarGroup(LOST_ORDER, 'Lost / Not Converted')}
+    `;
   }
 
   let sortState = { key: null, direction: 1 }; // 1 = ascending, -1 = descending
