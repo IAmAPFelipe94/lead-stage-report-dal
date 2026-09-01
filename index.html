@@ -468,7 +468,7 @@
         <td data-label="Current Stage"><span class="stage-pill">${escapeHtml(l.stage)}</span></td>
         <td data-label="Pipeline">${escapeHtml(l.pipeline)}</td>
         <td data-label="Interested In">${escapeHtml(l.interestedIn)}</td>
-        <td data-label="Source">${escapeHtml(l.source)}</td>
+        <td data-label="Ad Source">${escapeHtml(l.adSource)}</td>
       </tr>
     `).join('');
 
@@ -484,7 +484,7 @@
             <th class="sortable" data-key="stage">Current Stage</th>
             <th class="sortable" data-key="pipeline">Pipeline</th>
             <th class="sortable" data-key="interestedIn">Interested In</th>
-            <th class="sortable" data-key="source">Source</th>
+            <th class="sortable" data-key="adSource">Ad Source</th>
           </tr>
         </thead>
         <tbody>${rowsHtml}</tbody>
@@ -629,7 +629,7 @@
       Pipeline: l.pipeline,
       'Current Stage': l.stage,
       'Interested In': l.interestedIn,
-      Source: l.source,
+      'Ad Source': l.adSource,
       Value: l.value,
     }));
   }
