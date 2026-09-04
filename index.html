@@ -140,14 +140,25 @@
 
   .funnel-total { font-size: 13px; font-weight: 600; color: var(--ink); margin-bottom: 20px; }
   .funnel-section { margin-bottom: 28px; }
+  .funnel-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    border-bottom: 1px solid var(--line);
+    margin: 0 0 12px;
+    padding-bottom: 6px;
+  }
+  .funnel-section-total {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ink);
+  }
   .funnel-section h3 {
     font-size: 13px;
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--ink-soft);
-    margin: 0 0 12px;
-    padding-bottom: 6px;
-    border-bottom: 1px solid var(--line);
+    margin: 0;
   }
   .funnel-row {
     display: grid;
@@ -306,7 +317,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script>
-  // Set this to your deployed Apps Script Web App URL after deployment.
+  // Set this to your deployed Cloudflare Worker URL (see Lead_Stage_Report_Worker.js).
   const WEB_APP_URL = "https://lead-stage-report-dal.apfelipe94.workers.dev/";
 
   const startInput = document.getElementById('startDate');
@@ -557,9 +568,16 @@
     const total = data.leads.length;
     const maxCount = Math.max(1, ...Object.values(buckets).map(b => b.count));
 
-    function renderBarGroup(orderKeys, title) {
-      const rows = orderKeys
-        .filter(k => buckets[k])
+    function sectionTotal(orderKeys) {
+      return orderKeys.reduce((sum, k) => sum + (buckets[k] ? buckets[k].count : 0), 0);
+    }
+
+    function renderBarGroup(orderKeys, title, sortByCount) {
+      const keysToRender = sortByCount
+        ? orderKeys.filter(k => buckets[k]).sort((a, b) => buckets[b].count - buckets[a].count)
+        : orderKeys.filter(k => buckets[k]);
+
+      const rows = keysToRender
         .map(k => {
           const b = buckets[k];
           const pct = ((b.count / total) * 100).toFixed(1);
@@ -576,14 +594,25 @@
           `;
         }).join('');
       if (!rows) return '';
-      return `<div class="funnel-section"><h3>${title}</h3>${rows}</div>`;
+
+      const groupTotal = sectionTotal(orderKeys);
+      const groupPct = ((groupTotal / total) * 100).toFixed(1);
+      return `
+        <div class="funnel-section">
+          <div class="funnel-section-header">
+            <h3>${title}</h3>
+            <span class="funnel-section-total">${groupTotal} (${groupPct}%)</span>
+          </div>
+          ${rows}
+        </div>
+      `;
     }
 
     container.innerHTML = `
       <div class="freshness">Data as of ${formatLastUpdated(data.lastUpdated)} · refreshes every 12 hours</div>
       <div class="funnel-total">${total} leads in this range</div>
-      ${renderBarGroup(PROGRESS_ORDER, 'Sales Journey')}
-      ${renderBarGroup(LOST_ORDER, 'Lost / Not Converted')}
+      ${renderBarGroup(PROGRESS_ORDER, 'Sales Journey', false)}
+      ${renderBarGroup(LOST_ORDER, 'Lost / Not Converted', true)}
     `;
   }
 
